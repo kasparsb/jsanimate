@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en-EN" prefix="og: http://ogp.me/ns#">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=0">
+    <style>
+    html,
+    body {
+        height: 100%;
+        background: #e8e8e8;
+        padding: 0;
+        margin: 0;
+    }
+    .block {
+        width: 80vw;
+
+        position: absolute;
+        left: 0;
+        top: 0;
+        
+        height: 400px;
+        background: #8842f7;
+        will-change: transform;
+
+        background-image: url(https://c1.staticflickr.com/1/542/32288461045_3f69e0c2c6_k.jpg);
+        background-repeat: no-repeat;
+        background-size: cover;
+
+    }
+    .block2 {
+        left: 80vw;
+        background-image: url(https://c1.staticflickr.com/1/258/32187816681_2100cb4f20_k.jpg);
+    }
+    .slides {
+        overflow: hidden;
+    }
+    </style>
+</head>
+<body>
+    <div class="slides">
+        <div class="block block1"></div>
+        <div class="block block2"></div>
+    </div>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/16.3.5/Tween.min.js"></script>
+    <script>
+    var start, stop, isStarted, x, startTime, lastTime, t, el, first;
+
+
+    var Bezier = function(p1x, p1y, p2x, p2y) {
+        // Calculate the polynomial coefficients, implicit first and last control points are (0,0) and (1,1).
+        var cx = 3.0 * p1x;
+        var bx = 3.0 * (p2x - p1x) - cx;
+        var ax = 1.0 - cx -bx;
+             
+        var cy = 3.0 * p1y;
+        var by = 3.0 * (p2y - p1y) - cy;
+        var ay = 1.0 - cy - by;
+
+        var epsilon = 0.00001;
+
+        function sampleCurveDerivativeX(t) {
+            return (3.0 * ax * t + 2.0 * bx) * t + cx;
+        }
+
+        function sampleCurveX(t) {
+            // `ax t^3 + bx t^2 + cx t' expanded using Horner's rule.
+            return ((ax * t + bx) * t + cx) * t;
+        }
+
+        function sampleCurveY(t) {
+            return ((ay * t + by) * t + cy) * t;
+        }
+
+        // Given an x value, find a parametric value it came from.
+        function solveCurveX(x)
+        {
+            var t0, t1, t2, x2, d2, i;
+
+            // First try a few iterations of Newton's method -- normally very fast.
+            for (t2 = x, i = 0; i < 8; i++) {
+                x2 = sampleCurveX(t2) - x;
+                if (Math.abs(x2) < epsilon) {
+                    return t2;
+                }
+                d2 = sampleCurveDerivativeX(t2);
+                if (Math.abs(d2) < 1e-6) {
+                    break;
+                }
+                t2 = t2 - x2 / d2;
+            }
+
+            // Fall back to the bisection method for reliability.
+            t0 = 0.0;
+            t1 = 1.0;
+            t2 = x;
+
+            if (t2 < t0) {
+                return t0;
+            }
+            if (t2 > t1) {
+                return t1;
+            }
+
+            while (t0 < t1) {
+                x2 = sampleCurveX(t2);
+                if (Math.abs(x2 - x) < epsilon) {
+                    return t2;
+                }
+                if (x > x2) {
+                    t0 = t2;
+                }
+                else {
+                    t1 = t2;
+                }
+                t2 = (t1 - t0) * .5 + t0;
+            }
+
+            // Failure.
+            return t2;
+        }
+
+        this.get = function(x) {
+            return sampleCurveY(solveCurveX(x));
+        }
+    }
+
+
+
+    function Framer() {
+        this.isStarted = false;
+        this.framesDone = 0;
+    }
+    Framer.prototype = {
+        start: function() {
+            this.isStarted = true;
+            this.framesDone = 0;
+            this.frame();
+        },
+        stop: function() {
+            this.isStarted = false;
+        },
+        frame: function() {
+            requestAnimationFrame((function(mthis){
+                return function(at) {
+                    
+                    if (mthis.isStarted) {
+                        console.log('frame', at);
+
+                        mthis.frameCb();
+
+                        mthis.frame();
+                    }
+
+                }
+            })(this))
+        }
+    }
+
+
+    function Stepper() {
+        this.interval = 0;
+        this.timeDone = 0;
+        this.lastTime = 0;
+        this.currentStepTime = 0;
+    }
+    Stepper.prototype = {
+        start: function(duration, stepCb, doneCb) {
+            this.duration = duration;
+            //this.startTime = +new Date();
+            this.startTime = window.performance.now();
+            this.stepCb = stepCb;
+            this.doneCb = doneCb;
+
+            this.progress = 0;
+
+            this.easing = new Bezier(0,0,1,1);
+
+            this.step();
+        },
+        stop: function() {
+            clearInterval(this.interval);
+            this.stepCb(1);
+            this.doneCb();
+        },
+        step: function() {
+            this.interval = setInterval((function(mthis){
+
+                return function() {
+                    //mthis.currentStepTime = +new Date();
+                    mthis.currentStepTime = window.performance.now();
+                    mthis.timeDone = mthis.currentStepTime - mthis.startTime;
+
+                    console.log('step', mthis.timeDone, mthis.currentStepTime - mthis.lastTime, mthis.duration);
+
+                    mthis.lastTime = mthis.currentStepTime;
+
+                    mthis.stepCb(mthis.progress);
+                    
+                    // Progress atkarīgs no duration izpildes
+                    //mthis.progress = mthis.easing.get(mthis.timeDone / mthis.duration);
+                    mthis.progress = mthis.timeDone / mthis.duration;
+
+
+
+                    if (mthis.timeDone >= mthis.duration) {
+                        mthis.stop();
+                    }
+                }
+
+
+            })(this), 1000/120)
+        }
+    }
+
+    el = $('.block1').get(0);
+    el2 = $('.block2').get(0);
+
+
+    var st = new Stepper();
+    var fr = new Framer();
+
+
+    function start(duration, targetX) {
+        // var progress = 0;
+        // var x = 0;
+        // var target = targetX;
+
+        // el2.style.transition = 'none';
+        // setTimeout(function(){
+        //     el2.style.transform = 'translate3d(0,0,0)';
+            
+        //     setTimeout(function(){
+        //         el2.style.transition = 'transform '+duration+'ms linear';    
+
+        //         setTimeout(function(){
+        //             el2.style.transform = 'translate3d(0,'+targetX+'px,0)';
+        //         }, 10)
+        //     }, 10)
+        // }, 10)
+
+
+
+        // var draw = function(progress) {
+        //     x = target * progress;
+
+        //     console.log('draw', progress, x);
+
+        //     el.style.transform = 'translate3d(0,'+Math.round(x)+'px,0)';
+        //     //el.style.transform = 'matrix3d(1,0,0.00,0,0.00,1,0.00,0,0,0,1,0,0,'+x+',0,1)';
+        // }
+
+
+
+
+
+
+        // fr.frameCb = function() {
+        //     draw(progress);
+        // }
+        // fr.start()
+
+        // st.start(duration, function(p){
+        //     progress = p;
+        // }, function(p){
+        //     fr.stop();
+
+        //     draw(progress);
+        // });
+
+
+        // var isRunning = true;
+        // var coords = { x: 0, y: 0 };
+        // var tween = new TWEEN.Tween(coords)
+        //     //.easing(TWEEN.Easing.Cubic.In)
+        //     .to({ x: targetX, y: 100 }, duration)
+        //     .onUpdate(function() {
+        //         el.style.transform = 'translate3d(0,'+this.x+'px,0)';
+        //     })
+        //     .onComplete(function(){
+        //         isRunning = false;
+        //     })
+        //     .start();
+
+        // requestAnimationFrame(animate);
+
+        // function animate(time) {
+        //     if (isRunning) {
+        //         console.log('a', time);
+        //         requestAnimationFrame(animate);
+        //         TWEEN.update(time);
+        //     }
+        // }
+
+
+
+        var startTime = window.performance.now();
+        var progress = 0, x = 0;
+        var easing = new Bezier(.25,.1,.25,1);
+
+        function animate(time) {
+            //console.log('a', time - startTime);
+            if (time - startTime < duration) {
+
+                progress = easing.get((time - startTime) / duration);
+                x = targetX * progress;
+
+                
+                el.style.transform = 'translate3d(-'+x+'px,0,0)';
+                el2.style.transform = 'translate3d(-'+x+'px,0,0)';
+
+                requestAnimationFrame(animate);    
+            }
+        }
+
+        requestAnimationFrame(animate);
+        
+    }   
+    </script>
+</body>
+</html>
